@@ -1,0 +1,27 @@
+Both:
+d7c8r: 105
+d7d8r: 103
+d7d8q: 47
+d7c8q: 117
+
+stockfish:
+d7c8b: 1709
+d7c8n: 1598
+d7d8b: 1877
+d7d8n: 1858
+
+me: 
+d7c8b: 1711
+d7c8n: 1600
+d7d8b: 1879
+d7d8n: 1860
+
+new:
+d7c8r: 97
+d7c8b: 1594
+d7c8q: 109
+d7c8n: 1487
+d7d8r: 95
+d7d8b: 1746
+d7d8q: 43
+d7d8n: 1723
