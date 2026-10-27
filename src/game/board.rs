@@ -1,3 +1,5 @@
+use serde::de::value::EnumAccessDeserializer;
+
 use crate::game::datatypes::*;
 use crate::game::state::*;
 use crate::utils::*;
@@ -7,6 +9,7 @@ use std::convert::TryFrom;
 
 use crate::dprintln;
 
+#[derive(Clone)]
 pub struct Board {
     // Bitboards
     all: u64,
@@ -41,6 +44,12 @@ impl Board {
 
     pub fn bitboard(&self, pt: PieceType, side: bool) -> u64 {
         &self.piece[pt as usize] & &self.colored[side as usize]
+    }
+
+    pub fn zobrist_idx(&self, square: usize) -> usize {
+        self.pieces[square].color as usize * 64 * 6 
+            + self.pieces[square].piece_type as usize * 64 
+            + self.pieces[square].square as usize
     }
 
     pub fn diagnose(&self) {
@@ -80,9 +89,14 @@ impl Board {
         let start: u64 = 1 << cmove.start;
         let end: u64 = 1 << cmove.end;
 
+        // zobrist clear start
+        state.update_zobrist(self.zobrist_idx(cmove.start as usize));
+
         // capture (BB + hashmap)
         if self.colored[!turn as usize] & 1u64 << capture_square > 0 {
-            // print
+            // zobrist clear capture
+            state.update_zobrist(self.zobrist_idx(capture_square as usize));
+
             let capture_square_bb: u64 = 1 << capture_square;
             self.colored[!turn as usize] &= !capture_square_bb;
             capture_type = self.pieces[capture_square as usize].piece_type;
@@ -93,9 +107,11 @@ impl Board {
         self.piece[piece.piece_type as usize] &= !start;
         self.piece[result_piece as usize] |= end;
 
-
         // hashmap
         self.pieces[cmove.end as usize] = Piece {piece_type: result_piece, square: cmove.end, color: Color::from_bool(turn)};
+
+        // zobrist update end square
+        state.update_zobrist(self.zobrist_idx(cmove.end as usize));
 
         // castling
         if piece.piece_type == PieceType::KING && file(cmove.end).abs_diff(file(cmove.start)) > 1
@@ -104,6 +120,7 @@ impl Board {
             let ssquare = rank(cmove.start) * 8 + if kingside {7} else {0};
             let esquare = rank(cmove.start) * 8 + if kingside {5} else {3};
 
+
             let start: u64 = 1 << ssquare;
             let end: u64 = 1 << esquare;
 
@@ -111,7 +128,10 @@ impl Board {
             self.piece[PieceType::ROOK as usize] = (self.piece[PieceType::ROOK as usize] | end) & !start;
 
             self.pieces[esquare as usize] = Piece {piece_type: PieceType::ROOK, square: esquare, color: Color::from_bool(turn)};
-            self.pieces[ssquare as usize] = Piece::default();
+
+            // zobrist add end
+            state.update_zobrist(self.zobrist_idx(ssquare as usize));
+            state.update_zobrist(self.zobrist_idx(esquare as usize));
         }
 
         // update all pieces
@@ -149,7 +169,11 @@ impl Board {
 
         // hashmap
         self.pieces[cmove.start as usize] = Piece {piece_type: start_piece, square: cmove.start, color: Color::from_bool(turn)};
-        
+
+        // zobrist end clear and start
+        state.update_zobrist(self.zobrist_idx(cmove.start as usize));
+        state.update_zobrist(self.zobrist_idx(cmove.end as usize));
+
         // capture (0b111 used to indicate readiness of EP)
         // dprintln!("{:?}", capture_type);
         if capture_type != PieceType::EMPTY && capture_type != PieceType::EP {
@@ -157,6 +181,9 @@ impl Board {
             self.colored[!turn as usize] |= capture_square_bb;
             self.piece[capture_type as usize] |= capture_square_bb;
             self.pieces[capture_square as usize] = Piece {piece_type: capture_type, square: capture_square, color: Color::from_bool(!turn)};
+
+            // capture update (or undo)
+            state.update_zobrist(self.zobrist_idx(capture_square as usize));
         } 
 
         // castling
@@ -173,14 +200,19 @@ impl Board {
             self.piece[PieceType::ROOK as usize] = (self.piece[PieceType::ROOK as usize] & !end) | start;
 
             self.pieces[ssquare as usize] = Piece {piece_type: PieceType::ROOK, square: ssquare, color: Color::from_bool(turn)};
-            self.pieces[esquare as usize] = Piece::default();
+
+            // zobrist castling move
+            state.update_zobrist(self.zobrist_idx(ssquare as usize));
+            state.update_zobrist(self.zobrist_idx(esquare as usize));
         }
 
         // dprintln!("{:?}", start_piece);
         // print_bitboard(self.bitboard(PieceType::KING, false));
 
         // update all pieces
-        self.all = self.colored[0] | self.colored[1];
+        self.all = self.colored[0] | self.colored[1];   
+
+        state.undo_zobrist();
 
         state.pop_history();
 

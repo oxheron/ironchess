@@ -21,7 +21,7 @@ pub(crate) enum Color {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum DIR {
+pub(crate) enum Dir {
     NORTH,
     NORTHEAST,
     EAST,
@@ -32,18 +32,27 @@ pub(crate) enum DIR {
     NORTHWEST,
 }
 
-pub(crate) const ROOK_DIRS: [DIR; 4] = [
-    DIR::NORTH, 
-    DIR::EAST, 
-    DIR::SOUTH, 
-    DIR::WEST,
+#[derive(Clone, Copy, PartialEq, Debug, TryFromPrimitive, Default, Hash, Eq)]
+#[repr(u8)]
+pub(crate) enum NodeType {
+    #[default] NONE,
+    EXACT,
+    LOWER,
+    UPPER
+}
+
+pub(crate) const ROOK_DIRS: [Dir; 4] = [
+    Dir::NORTH, 
+    Dir::EAST, 
+    Dir::SOUTH, 
+    Dir::WEST,
 ];
 
-pub(crate) const BISHOP_DIRS: [DIR; 4] = [
-    DIR::NORTHEAST, 
-    DIR::SOUTHEAST,
-    DIR::SOUTHWEST,
-    DIR::NORTHWEST,
+pub(crate) const BISHOP_DIRS: [Dir; 4] = [
+    Dir::NORTHEAST, 
+    Dir::SOUTHEAST,
+    Dir::SOUTHWEST,
+    Dir::NORTHWEST,
 ];
 
 impl Color {
@@ -59,7 +68,7 @@ pub(crate) struct Piece {
     pub color: Color,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub(crate) struct Move {
     pub start: u8,
     pub end: u8,
