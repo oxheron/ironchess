@@ -2,6 +2,7 @@ use crate::dprintln;
 use crate::game::board::Board;
 use crate::game::state::State;
 use crate::game::datatypes::*;
+use crate::zobrist;
 
 // Castling bits: K=bit3, Q=bit2, k=bit1, q=bit0
 // colored[0]=white, colored[1]=black
@@ -23,7 +24,9 @@ pub fn load_fen(fen: &str) -> (Board, State) {
     let fullmove: u32 = parts[5].parse().expect("invalid fullmove number");
 
     let halfmoves = (fullmove - 1) * 2 + if active_color == "b" { 1 } else { 0 };
-    let state = State::new(castling, fiftymove, epfile, capture_type as u8, halfmoves);
+    let mut state = State::new(castling, fiftymove, epfile, capture_type as u8, halfmoves);
+
+    state.set_zobrist(zobrist::zobrist_from_board(&board, &state));
 
     (board, state)
 }

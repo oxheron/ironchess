@@ -5,13 +5,11 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::sync::LazyLock;
 
-const MAGIC_PATH: &str = "resources/magic.bin";
-
 pub static MAGICATTACKS: LazyLock<([Magic; 128], Vec<u64>)> = LazyLock::new(|| {
-    match load_magic(MAGIC_PATH) {
-    Ok(value) => value,
-    Err(e) => panic!("Error: {}", e),
-    }
+    // A GUI may launch the engine from any working directory.
+    let loaded: MagicData = postcard::from_bytes(include_bytes!("../../resources/magic.bin"))
+        .expect("invalid embedded magic tables");
+    (loaded.magic.try_into().expect("expected 128 magic tables"), loaded.attacks)
 });
 
 #[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
@@ -29,27 +27,27 @@ struct MagicData {
 }
 
 fn calc_rook_attacks(square: u8, occupied: u64) -> u64 {
-    positive_ray(square, occupied, DIR::NORTH) 
-        | positive_ray(square, occupied, DIR::EAST) 
-        | negative_ray(square, occupied, DIR::SOUTH) 
-        | negative_ray(square, occupied, DIR::WEST)
+    positive_ray(square, occupied, Dir::NORTH) 
+        | positive_ray(square, occupied, Dir::EAST) 
+        | negative_ray(square, occupied, Dir::SOUTH) 
+        | negative_ray(square, occupied, Dir::WEST)
 }
 
 fn calc_bishop_attacks(square: u8, occupied: u64) -> u64 {
-    positive_ray(square, occupied, DIR::NORTHWEST) 
-        | positive_ray(square, occupied, DIR::NORTHEAST) 
-        | negative_ray(square, occupied, DIR::SOUTHWEST) 
-        | negative_ray(square, occupied, DIR::SOUTHEAST)
+    positive_ray(square, occupied, Dir::NORTHWEST) 
+        | positive_ray(square, occupied, Dir::NORTHEAST) 
+        | negative_ray(square, occupied, Dir::SOUTHWEST) 
+        | negative_ray(square, occupied, Dir::SOUTHEAST)
 }
 
-fn positive_ray(square: u8, occupied: u64, dir: DIR) -> u64{
+fn positive_ray(square: u8, occupied: u64, dir: Dir) -> u64{
     let attacks = find_ray(square, dir);
     let blocker = attacks & occupied;
     let block_square = (blocker | 0x8000000000000000).trailing_zeros() as u8;
     attacks ^ find_ray(block_square, dir)
 }
 
-fn negative_ray(square: u8, occupied: u64, dir: DIR) -> u64{
+fn negative_ray(square: u8, occupied: u64, dir: Dir) -> u64{
     let attacks = find_ray(square, dir);
     let blocker = attacks & occupied;
     let block_square = (blocker | 1).ilog2() as u8;

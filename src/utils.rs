@@ -81,7 +81,7 @@ fn gen_ray(square: u8, dx: i8, dy: i8) -> u64 {
     attacks
 }
 
-pub(crate) fn find_ray(square: u8, dir: DIR) -> u64 {
+pub(crate) fn find_ray(square: u8, dir: Dir) -> u64 {
     static RAYS: LazyLock<[Vec<u64>; 8]> =  LazyLock::new(|| {
         let mut tmp: [Vec<u64>; 8] = std::array::from_fn(|_| Vec::new()); 
 

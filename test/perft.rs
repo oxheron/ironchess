@@ -27,7 +27,7 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 
 use crate::game::load::load_fen;
-use crate::search::search;
+use crate::search::perft;
 
 struct PerftCase {
     name: &'static str,
@@ -40,7 +40,7 @@ fn assert_perft(case: &PerftCase, depth: u32) {
     let (mut board, state) = load_fen(case.fen);
     let started = Instant::now();
     // Exercise the engine's recursive search and its make/unmake path.
-    let actual = search(depth, &mut board, state);
+    let actual = perft(depth, &mut board, state);
     let expected = case.nodes[depth as usize - 1];
     eprintln!(
         "{} depth {depth}: {actual} nodes ({:.3}s)",
