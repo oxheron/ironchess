@@ -8,8 +8,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::game::{board::Board, load::load_fen, state::State};
-use crate::movegen::generate_moves;
-use crate::search::{SearchInfo, SearchLimits, start_search_with_info};
+use crate::search::memory::SearchFrame;
+use crate::search::{SearchInfo, SearchLimits, generate_ordered_moves, start_search_with_info};
 
 const START_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 type SearchJob = (Arc<AtomicBool>, JoinHandle<()>);
@@ -95,7 +95,7 @@ fn format_info(info: SearchInfo) -> String {
     let milliseconds = info.elapsed.as_millis();
     let nps = u128::from(info.nodes) * 1000 / milliseconds.max(1);
     // En Croissant reads its evaluation and candidate move from info/PV.
-    // Only the root move is reported; no move ordering is applied.
+    // Only the root move is reported.
     format!(
         "info depth {} multipv 1 score cp {} nodes {} time {} nps {} pv {}",
         info.depth, info.score, info.nodes, milliseconds, nps, info.best_move
@@ -123,9 +123,13 @@ fn parse_position(tokens: &[&str]) -> Result<(Board, State), &'static str> {
         return Err("expected moves after the position");
     }
     let (mut board, mut state) = load_fen(&fen);
+    let mut frame = SearchFrame::default();
     for notation in rest.iter().skip(1) {
-        let cmove = generate_moves(&board, &state)
-            .into_iter()
+        generate_ordered_moves(&board, &state, &mut frame);
+        let cmove = frame
+            .ordered_moves
+            .iter()
+            .copied()
             .find(|cmove| cmove.to_string() == *notation)
             .ok_or("illegal move in position command")?;
         state = board.do_move(state, &cmove);

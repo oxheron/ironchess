@@ -1,6 +1,7 @@
 use super::*;
 use crate::game::datatypes::PieceType;
 use crate::search::start_search;
+use crate::test_support::legal_moves;
 
 #[test]
 fn position_replays_opening_moves() {
@@ -41,6 +42,32 @@ fn position_replays_castling_en_passant_and_underpromotion() {
         assert_ne!(board.all() & (1 << square), 0);
         assert_eq!(board.pieces()[square].piece_type, piece);
         assert!(state.turn());
+    }
+}
+
+#[test]
+fn position_replays_all_promotion_choices_for_both_colors() {
+    for (fen, notation, square, next_turn) in [
+        ("1r2k3/P7/8/8/8/8/8/4K3 w - - 0 1", "a7a8", 56, true),
+        ("1r2k3/P7/8/8/8/8/8/4K3 w - - 0 1", "a7b8", 57, true),
+        ("4k3/8/8/8/8/8/p7/1R2K3 b - - 0 1", "a2a1", 0, false),
+        ("4k3/8/8/8/8/8/p7/1R2K3 b - - 0 1", "a2b1", 1, false),
+    ] {
+        for (suffix, piece) in [
+            ("q", PieceType::QUEEN),
+            ("n", PieceType::KNIGHT),
+            ("r", PieceType::ROOK),
+            ("b", PieceType::BISHOP),
+        ] {
+            let command = format!("fen {fen} moves {notation}{suffix}");
+            let (board, state) =
+                parse_position(&command.split_whitespace().collect::<Vec<_>>()).unwrap();
+            assert_eq!(board.pieces()[square].piece_type, piece, "{command}");
+            assert_eq!(state.turn(), next_turn);
+        }
+
+        let missing_piece = format!("fen {fen} moves {notation}");
+        assert!(parse_position(&missing_piece.split_whitespace().collect::<Vec<_>>()).is_err());
     }
 }
 
@@ -91,20 +118,26 @@ fn search_captures_material_even_late_in_a_game() {
 #[test]
 fn search_finds_mate_at_the_depth_boundary() {
     assert_eq!(best_move("7k/8/5KQ1/8/8/8/8/8 w - - 0 1", 1), "g6g7");
-    let (mut board, state) = load_fen("7k/6Q1/5K2/8/8/8/8/8 b - - 0 1");
-    assert!(
-        start_search(
-            SearchLimits {
-                depth: 1,
-                movetime: None,
-                nodes: None,
-            },
-            &mut board,
-            state,
-            &AtomicBool::new(false),
-        )
-        .is_none()
-    );
+    for fen in [
+        "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1",
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+    ] {
+        let (mut board, state) = load_fen(fen);
+        assert!(
+            start_search(
+                SearchLimits {
+                    depth: 1,
+                    movetime: None,
+                    nodes: None,
+                },
+                &mut board,
+                state,
+                &AtomicBool::new(false),
+            )
+            .is_none(),
+            "{fen}"
+        );
+    }
 }
 
 #[test]
@@ -116,7 +149,7 @@ fn interrupted_search_restores_the_board() {
     ] {
         let (mut board, state) = load_fen(START_FEN);
         let before = board.clone();
-        let legal = generate_moves(&board, &state);
+        let legal = legal_moves(&board, &state);
         let best = start_search(
             SearchLimits {
                 depth: 64,
@@ -135,7 +168,7 @@ fn interrupted_search_restores_the_board() {
         assert_eq!(board.all(), before.all());
         assert_eq!(board.colored(), before.colored());
         assert_eq!(board.piece(), before.piece());
-        assert_eq!(generate_moves(&board, &state), legal);
+        assert_eq!(legal_moves(&board, &state), legal);
     }
 }
 
@@ -160,7 +193,7 @@ fn clock_limits_use_the_side_to_move_and_keep_a_time_reserve() {
 #[test]
 fn search_reports_completed_depths_with_gui_readable_moves_and_scores() {
     let (mut board, state) = load_fen("3q3k/8/8/8/8/8/8/3R3K w - - 0 100");
-    let legal = generate_moves(&board, &state);
+    let legal = legal_moves(&board, &state);
     let mut reports = Vec::new();
     let best = start_search_with_info(
         SearchLimits {

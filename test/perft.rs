@@ -119,6 +119,16 @@ macro_rules! perft_positions {
 include!("positions.rs");
 
 #[test]
+fn depth_zero_counts_the_current_position_without_changing_the_board() {
+    let (mut board, state) = load_fen(CASES[0].fen);
+    let before = board.clone();
+    assert_eq!(perft(0, &mut board, state), 1);
+    assert_eq!(board.all(), before.all());
+    assert_eq!(board.colored(), before.colored());
+    assert_eq!(board.piece(), before.piece());
+}
+
+#[test]
 #[ignore = "requires Stockfish; independently verifies all fixtures through depth 6"]
 fn verify_stockfish() {
     let executable = std::env::var_os("STOCKFISH").unwrap_or_else(|| "stockfish".into());

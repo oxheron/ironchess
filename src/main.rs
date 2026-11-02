@@ -10,6 +10,10 @@ mod zobrist;
 #[path = "../test/perft.rs"]
 mod perft;
 
+#[cfg(test)]
+#[path = "../test/support.rs"]
+mod test_support;
+
 fn main() -> std::io::Result<()> {
     uci::run()
 }
