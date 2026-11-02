@@ -68,7 +68,7 @@ pub(crate) struct Piece {
     pub color: Color,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) struct Move {
     pub start: u8,
     pub end: u8,

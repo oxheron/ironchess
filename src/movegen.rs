@@ -1,71 +1,71 @@
+pub mod captures;
 pub mod magic;
 pub mod moveinfo;
 
 use crate::dprintln;
 use crate::game::{board::Board, datatypes::*, state::State};
+use crate::search::memory::SearchFrame;
 use crate::utils::*;
 
 pub use crate::movegen::magic::*;
 pub use crate::movegen::moveinfo::*;
 
-// Also generates moveinfo
-pub fn generate_moves(board: &Board, state: &State) -> Vec<Move> {
-    let moveinfo = generate_info(board, state);
-    let move_bb = generate_move_bitboards(board, state, &moveinfo);
-    extract_moves(move_bb, board)
+// Legal destinations indexed by origin square, independent of promotion type.
+#[derive(PartialEq)]
+pub struct MoveBitset {
+    bits: Box<[u64; 64]>,
 }
 
-pub fn extract_moves(moves: Vec<(u8, u64)>, board: &Board) -> Vec<Move> {
-    let mut moves_list: Vec<Move> = Vec::new();
-
-    for (sq, m) in moves {
-        let mut end_iter: u64 = m;
-        while end_iter != 0 {
-            let esq = end_iter.trailing_zeros() as u8;
-
-            if rank(esq) % 7 == 0 && board.pieces()[sq as usize].piece_type == PieceType::PAWN {
-                moves_list.push(Move {
-                    start: sq,
-                    end: esq,
-                    piece: PieceType::ROOK,
-                });
-                moves_list.push(Move {
-                    start: sq,
-                    end: esq,
-                    piece: PieceType::BISHOP,
-                });
-                moves_list.push(Move {
-                    start: sq,
-                    end: esq,
-                    piece: PieceType::QUEEN,
-                });
-                moves_list.push(Move {
-                    start: sq,
-                    end: esq,
-                    piece: PieceType::KNIGHT,
-                });
-            } else {
-                moves_list.push(Move {
-                    start: sq,
-                    end: esq,
-                    piece: PieceType::EMPTY,
-                });
-            }
-
-            end_iter &= end_iter - 1;
-        }
+impl MoveBitset {
+    pub fn get_square(&self, square: u8) -> u64 {
+        self.bits[square as usize]
     }
 
-    moves_list
+    pub fn is_empty(&self) -> bool {
+        self.bits.iter().all(|&destinations| destinations == 0)
+    }
+
+    // Set square (piece)
+    pub fn set_square(&mut self, square: u8, bb: u64) {
+        self.bits[square as usize] = bb;
+    }
+
+    // Check move is set
+    pub fn check_move(&self, m: &Move) -> bool {
+        (self.bits[m.start as usize] & (1u64 << m.end)) != 0
+    }
+
+    // Checks if move is set, sets it to 0 if it is
+    pub fn clear_move(&mut self, m: &Move) -> bool {
+        let mask = 1u64 << m.end;
+        let destinations = &mut self.bits[m.start as usize];
+        let was_set = (*destinations & mask) != 0;
+        *destinations &= !mask;
+        was_set
+    }
+
+    pub fn clear(&mut self) {
+        self.bits.fill(0);
+    }
 }
 
-// Returns a list of pieces and associated legal move bitboards
-pub fn generate_move_bitboards(
+impl Default for MoveBitset {
+    fn default() -> Self {
+        Self {
+            bits: Box::new([0; 64]),
+        }
+    }
+}
+
+// Populate legal destinations without expanding promotion choices.
+pub fn generate_move_bitset(
     board: &Board,
     state: &State,
     moveinfo: &MoveInfo,
-) -> Vec<(u8, u64)> {
-    let mut square_move_list: Vec<(u8, u64)> = Vec::new();
+    search_frame: &mut SearchFrame,
+) -> bool {
+    let move_bitset = &mut search_frame.move_bitset;
+    move_bitset.clear();
 
     let mut piece_iter = board.colored()[state.turn() as usize];
     while piece_iter != 0 {
@@ -80,7 +80,7 @@ pub fn generate_move_bitboards(
         if piece.piece_type == PieceType::KING {
             let mut moves = generate_king(square, board, state, moveinfo);
             moves |= generate_castles(board, state, moveinfo);
-            square_move_list.push((square, moves));
+            move_bitset.set_square(square, moves);
             piece_iter &= piece_iter - 1;
             continue;
         }
@@ -107,15 +107,18 @@ pub fn generate_move_bitboards(
         }
 
         if ((1u64 << square) & moveinfo.pins) > 0 {
-            moves &= (moveinfo.pin_rays 
-                & LINE[square as usize * 64 + board.bitboard(PieceType::KING, state.turn()).trailing_zeros() as usize]);
+            moves &= (moveinfo.pin_rays
+                & LINE[square as usize * 64
+                    + board
+                        .bitboard(PieceType::KING, state.turn())
+                        .trailing_zeros() as usize]);
         }
 
-        square_move_list.push((square, moves));
+        move_bitset.set_square(square, moves);
         piece_iter &= piece_iter - 1;
     }
 
-    square_move_list
+    true
 }
 
 pub fn find_king_attacks(bb: u64) -> u64 {
@@ -327,7 +330,10 @@ fn generate_castles(board: &Board, state: &State, moveinfo: &MoveInfo) -> u64 {
 // SHOULD do filtering for check cases despite generally other piecegens don't (also its pretty simple here)
 // Does not handle normal pins
 fn generate_ep(square: u8, board: &Board, state: &State, moveinfo: &MoveInfo) -> u64 {
-    let capture_square: u8 = (if state.turn() { 3u8 } else { 4u8 }) * 8 + file(state.epfile());
+    if state.epfile() == 0b1000 {
+        return 0;
+    }
+    let capture_square: u8 = (if state.turn() { 3u8 } else { 4u8 }) * 8 + state.epfile();
     let mut final_square = capture_square;
 
     if state.turn() {
@@ -364,3 +370,5 @@ fn generate_ep(square: u8, board: &Board, state: &State, moveinfo: &MoveInfo) ->
 
     1u64 << final_square
 }
+
+// Possible optimization, back search for EP

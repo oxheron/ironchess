@@ -1,7 +1,6 @@
 use super::zobrist_from_board;
-use crate::game::{board::Board, load::load_fen, state::State};
-use crate::movegen::generate_moves;
-use crate::zobrist;
+use crate::game::load::load_fen;
+use crate::test_support::legal_moves;
 
 // Quiet moves, double pushes, captures, castling, en passant, and all four
 // promotion types (with and without captures), for both colors.
@@ -19,7 +18,11 @@ const POSITIONS: &[&str] = &[
 fn loaded_hash_matches_full_recomputation() {
     for fen in POSITIONS {
         let (board, state) = load_fen(fen);
-        assert_eq!(state.zobrist(), zobrist_from_board(&board, &state), "FEN: {fen}");
+        assert_eq!(
+            state.zobrist(),
+            zobrist_from_board(&board, &state),
+            "FEN: {fen}"
+        );
     }
 }
 
@@ -28,7 +31,7 @@ fn move_hash_changes_match_full_recomputation() {
     for fen in POSITIONS {
         let (board, state) = load_fen(fen);
         let initial_hash = zobrist_from_board(&board, &state);
-        for cmove in generate_moves(&board, &state) {
+        for cmove in legal_moves(&board, &state) {
             let mut moved_board = board.clone();
             let moved_state = moved_board.do_move(state.clone(), &cmove);
             // Compare XOR deltas to check move updates independently of loading.
@@ -45,7 +48,7 @@ fn move_hash_changes_match_full_recomputation() {
 fn undo_restores_hash_and_state() {
     for fen in POSITIONS {
         let (board, state) = load_fen(fen);
-        for cmove in generate_moves(&board, &state) {
+        for cmove in legal_moves(&board, &state) {
             let mut moved_board = board.clone();
             let moved_state = moved_board.do_move(state.clone(), &cmove);
             let restored = moved_board.do_unmove(moved_state, &cmove);
